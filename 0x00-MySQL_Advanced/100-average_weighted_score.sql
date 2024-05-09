@@ -1,44 +1,49 @@
--- Script to create a stored procedure ComputeAverageWeightedScoreForUser
--- The procedure computes and stores the average weighted score for a student
 
-DELIMITER //
+-- Initial
+DROP TABLE IF EXISTS corrections;
+DROP TABLE IF EXISTS users;
+DROP TABLE IF EXISTS projects;
 
-CREATE PROCEDURE ComputeAverageWeightedScoreForUser(
-    IN user_id INT
-)
-BEGIN
-    -- Declare variables for total weighted score and total weight
-    DECLARE total_weighted_score FLOAT;
-    DECLARE total_weight FLOAT;
+CREATE TABLE IF NOT EXISTS users (
+    id int not null AUTO_INCREMENT,
+    name varchar(255) not null,
+    average_score float default 0,
+    PRIMARY KEY (id)
+);
 
-    -- Calculate the total weighted score for the user
-    SELECT SUM(corrections.score * projects.weight)
-    INTO total_weighted_score
-    FROM corrections
-    JOIN projects ON corrections.project_id = projects.id
-    WHERE corrections.user_id = user_id;
+CREATE TABLE IF NOT EXISTS projects (
+    id int not null AUTO_INCREMENT,
+    name varchar(255) not null,
+    weight int default 1,
+    PRIMARY KEY (id)
+);
 
-    -- Calculate the total weight for the user
-    SELECT SUM(projects.weight)
-    INTO total_weight
-    FROM corrections
-    JOIN projects ON corrections.project_id = projects.id
-    WHERE corrections.user_id = user_id;
+CREATE TABLE IF NOT EXISTS corrections (
+    user_id int not null,
+    project_id int not null,
+    score float default 0,
+    KEY `user_id` (`user_id`),
+    KEY `project_id` (`project_id`),
+    CONSTRAINT fk_user_id FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+    CONSTRAINT fk_project_id FOREIGN KEY (`project_id`) REFERENCES `projects` (`id`) ON DELETE CASCADE
+);
 
-    -- Calculate the average weighted score
-    DECLARE average_weighted_score FLOAT;
-    IF total_weight <> 0 THEN
-        SET average_weighted_score = total_weighted_score / total_weight;
-    ELSE
-        SET average_weighted_score = 0;
-    END IF;
+INSERT INTO users (name) VALUES ("Bob");
+SET @user_bob = LAST_INSERT_ID();
 
-    -- Update the user's average_score with the calculated average weighted score
-    UPDATE users
-    SET average_score = average_weighted_score
-    WHERE id = user_id;
-END;
-//
+INSERT INTO users (name) VALUES ("Jeanne");
+SET @user_jeanne = LAST_INSERT_ID();
 
-DELIMITER ;
+INSERT INTO projects (name, weight) VALUES ("C is fun", 1);
+SET @project_c = LAST_INSERT_ID();
+
+INSERT INTO projects (name, weight) VALUES ("Python is cool", 2);
+SET @project_py = LAST_INSERT_ID();
+
+
+INSERT INTO corrections (user_id, project_id, score) VALUES (@user_bob, @project_c, 80);
+INSERT INTO corrections (user_id, project_id, score) VALUES (@user_bob, @project_py, 96);
+
+INSERT INTO corrections (user_id, project_id, score) VALUES (@user_jeanne, @project_c, 91);
+INSERT INTO corrections (user_id, project_id, score) VALUES (@user_jeanne, @project_py, 73);
 
