@@ -1,4 +1,3 @@
-
 -- Initial
 DROP TABLE IF EXISTS corrections;
 DROP TABLE IF EXISTS users;
