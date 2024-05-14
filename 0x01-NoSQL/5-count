@@ -1,0 +1,3 @@
+// display docs
+db.school.count()
+
