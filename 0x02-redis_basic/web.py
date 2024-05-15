@@ -1,43 +1,47 @@
 #!/usr/bin/env python3
-'''
-A module with tools for request caching and tracking.
-'''
-import redis
+"""
+web.py - Module for caching and tracking URL accesses.
+"""
 import requests
+import redis
 from functools import wraps
-from typing import Callable
 
-# Module-level Redis instance
-redis_store = redis.Redis()
+redis_client = redis.Redis()
 
-def data_cacher(method: Callable) -> Callable:
-    '''
-    Decorator to cache the output of fetched data.
-    '''
-    @wraps(method)
-    def invoker(url) -> str:
-        '''
-        Wrapper function for caching the output.
-        '''
-        # Increment access count for the URL
-        redis_store.incr(f'count:{url}')
-        # Check if result is cached
-        result = redis_store.get(f'result:{url}')
-        if result:
-            return result.decode('utf-8')
-        # If not cached, fetch new content and update cache
-        result = method(url)
-        # Reset access count and set result with expiration time of 10 seconds
-        redis_store.set(f'count:{url}', 0)
-        redis_store.setex(f'result:{url}', 10, result)
-        return result
-    return invoker
 
-@data_cacher
+def count_access(func):
+    """Decorator to count the number of accesses to a URL."""
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        """Increment the access count for the URL."""
+        url = args[0]  # Extract URL from arguments
+        redis_client.incr(f"count:{url}")
+        return func(*args, **kwargs)
+    return wrapper
+
+
+def cache_page(expiration_time=10):
+    """Decorator to cache the page content with an expiration time."""
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            """Cache page content with an expiration time."""
+            url = args[0]  # Extract URL from arguments
+            cached_content = redis_client.get(url)
+            if cached_content:
+                return cached_content.decode()
+            else:
+                content = func(*args, **kwargs)
+                redis_client.setex(url, expiration_time, content)
+                return content
+        return wrapper
+    return decorator
+
+
+@count_access
+@cache_page(expiration_time=10)
 def get_page(url: str) -> str:
-    '''
-    Returns the content of a URL after caching the request's response,
-    and tracking the request.
-    '''
-    return requests.get(url).text
+    """Obtain the HTML content of a given URL."""
+    response = requests.get(url)
+    return response.text
 
