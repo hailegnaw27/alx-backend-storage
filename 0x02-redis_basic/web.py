@@ -3,50 +3,45 @@
 Module for web caching and tracking
 """
 
-import requests
 import redis
-import time
+import requests
 from functools import wraps
 
-def cache_page(url: str, expiration: int = 10):
-    """Decorator to cache web pages with expiration time"""
-    def decorator(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            key = f"cache:{url}"
-            cached_page = redis_client.get(key)
-            if cached_page:
-                return cached_page.decode("utf-8")
-            else:
-                page_content = func(*args, **kwargs)
-                redis_client.setex(key, expiration, page_content)
-                return page_content
-        return wrapper
-    return decorator
-
-def track_access(url: str):
-    """Decorator to track the number of times a URL is accessed"""
-    def decorator(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            redis_client.incr(f"count:{url}")
-            return func(*args, **kwargs)
-        return wrapper
-    return decorator
-
+# Redis connection
 redis_client = redis.Redis()
 
-@cache_page("http://slowwly.robertomurray.co.uk/delay/5000/url/https://www.example.com")
-@track_access("http://slowwly.robertomurray.co.uk/delay/5000/url/https://www.example.com")
+def url_access_count(method):
+    """Decorator to track URL access count and cache web pages"""
+    @wraps(method)
+    def wrapper(url):
+        """Wrapper function to track URL access count and cache web pages"""
+        # Generate cache key
+        key = "cached:" + url
+        # Check if the page is cached
+        cached_value = redis_client.get(key)
+        if cached_value:
+            # If cached, return the cached page content
+            return cached_value.decode("utf-8")
+
+        # If not cached, fetch new content and update cache
+        key_count = "count:" + url
+        html_content = method(url)
+
+        # Increment URL access count
+        redis_client.incr(key_count)
+        # Set cache with expiration time of 10 seconds
+        redis_client.set(key, html_content, ex=10)
+        redis_client.expire(key, 10)
+
+        return html_content
+    return wrapper
+
+@url_access_count
 def get_page(url: str) -> str:
     """Function to retrieve the HTML content of a URL"""
-    response = requests.get(url)
-    return response.text
+    results = requests.get(url)
+    return results.text
 
 if __name__ == "__main__":
-    url = "http://slowwly.robertomurray.co.uk/delay/5000/url/https://www.example.com"
-    for _ in range(3):
-        print(get_page(url))
-        time.sleep(1)
-    print(f"Access count for {url}: {redis_client.get(f'count:{url}')}")
+    get_page('http://slowwly.robertomurray.co.uk')
 
