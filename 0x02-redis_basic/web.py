@@ -1,47 +1,43 @@
 #!/usr/bin/env python3
-"""
-Module for web caching and tracking
-"""
-
+'''
+A module with tools for request caching and tracking.
+'''
 import redis
 import requests
 from functools import wraps
+from typing import Callable
 
-# Redis connection
-redis_client = redis.Redis()
+# Module-level Redis instance
+redis_store = redis.Redis()
 
-def url_access_count(method):
-    """Decorator to track URL access count and cache web pages"""
+def data_cacher(method: Callable) -> Callable:
+    '''
+    Decorator to cache the output of fetched data.
+    '''
     @wraps(method)
-    def wrapper(url):
-        """Wrapper function to track URL access count and cache web pages"""
-        # Generate cache key
-        key = "cached:" + url
-        # Check if the page is cached
-        cached_value = redis_client.get(key)
-        if cached_value:
-            # If cached, return the cached page content
-            return cached_value.decode("utf-8")
-
+    def invoker(url) -> str:
+        '''
+        Wrapper function for caching the output.
+        '''
+        # Increment access count for the URL
+        redis_store.incr(f'count:{url}')
+        # Check if result is cached
+        result = redis_store.get(f'result:{url}')
+        if result:
+            return result.decode('utf-8')
         # If not cached, fetch new content and update cache
-        key_count = "count:" + url
-        html_content = method(url)
+        result = method(url)
+        # Reset access count and set result with expiration time of 10 seconds
+        redis_store.set(f'count:{url}', 0)
+        redis_store.setex(f'result:{url}', 10, result)
+        return result
+    return invoker
 
-        # Increment URL access count
-        redis_client.incr(key_count)
-        # Set cache with expiration time of 10 seconds
-        redis_client.set(key, html_content, ex=10)
-        redis_client.expire(key, 10)
-
-        return html_content
-    return wrapper
-
-@url_access_count
+@data_cacher
 def get_page(url: str) -> str:
-    """Function to retrieve the HTML content of a URL"""
-    results = requests.get(url)
-    return results.text
-
-if __name__ == "__main__":
-    get_page('http://slowwly.robertomurray.co.uk')
+    '''
+    Returns the content of a URL after caching the request's response,
+    and tracking the request.
+    '''
+    return requests.get(url).text
 
